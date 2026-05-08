@@ -60,3 +60,6 @@ src/database/generated/prisma
 # SQLite
 *.db
 *.db-journal
+
+# Docs
+docs

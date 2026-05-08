@@ -10,7 +10,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model User {
@@ -19,7 +19,649 @@ model User {
   username  String    @unique
   email     String    @unique
   password  String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  roles UserRole[]
+  tables Table[]
+  createdSystems RpgSystem[]
+  tableMembers TableMember[]
+  appliedEffects SheetEffect[] @relation("AppliedBy")
+  updatedSessionStates SheetSessionState[] @relation("UpdatedBy")
+  createdAttributeOverrides SheetAttributeOverride[] @relation("CreatedBy")
+  createdTemplates SheetTemplate[] @relation("CreatedBy")
+
+  @@map("users")
+}
+
+model Role {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String?
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String @map("user_id")
+  roleId String @map("role_id")
+  user   User   @relation(fields: [userId], references: [id])
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RpgSystem {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  isOfficial  Boolean  @default(false) @map("is_official")
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdBy   String?  @map("created_by")
+  creator     User?    @relation(fields: [createdBy], references: [id])
+
+  attributeDefinitions SystemAttributeDefinition[]
+  skillDefinitions     SystemSkillDefinition[]
+  currencyDefinitions  SystemCurrencyDefinition[]
+  itemCategories       SystemItemCategory[]
+  raceDefinitions      SystemRaceDefinition[]
+  classDefinitions     SystemClassDefinition[]
+  tables              Table[]
+  sheetTemplates      SheetTemplate[]
+
+  @@map("rpg_systems")
+}
+
+enum AttributeType {
+  NUMBER
+  TEXT
+  BOOLEAN
+  MODIFIER
+
+  @@map("attribute_type")
+}
+
+model SystemAttributeDefinition {
+  id           String        @id @default(uuid())
+  systemId     String        @map("system_id")
+  system       RpgSystem     @relation(fields: [systemId], references: [id])
+  name         String
+  label        String
+  type         AttributeType
+  defaultValue String?       @map("default_value")
+  sortOrder    Int           @default(0) @map("sort_order")
+
+  @@map("system_attribute_definitions")
+}
+
+model SystemSkillDefinition {
+  id        String    @id @default(uuid())
+  systemId  String    @map("system_id")
+  system    RpgSystem @relation(fields: [systemId], references: [id])
+  name      String
+  label     String
+  sortOrder Int       @default(0) @map("sort_order")
+
+  @@map("system_skill_definitions")
+}
+
+model SystemCurrencyDefinition {
+  id        String    @id @default(uuid())
+  systemId  String    @map("system_id")
+  system    RpgSystem @relation(fields: [systemId], references: [id])
+  name      String
+  abbr      String
+  sortOrder Int       @default(0) @map("sort_order")
+
+  sheetCurrencies SheetCurrency[]
+
+  @@map("system_currency_definitions")
+}
+
+model SystemItemCategory {
+  id       String    @id @default(uuid())
+  systemId String    @map("system_id")
+  system   RpgSystem @relation(fields: [systemId], references: [id])
+  name     String
+
+  @@map("system_item_categories")
+}
+
+enum TraitType {
+  PASSIVE
+  ACTIVE
+  RESISTANCE
+  SENSE
+  MOVEMENT
+
+  @@map("trait_type")
+}
+
+model SystemRaceDefinition {
+  id          String   @id @default(uuid())
+  systemId    String   @map("system_id")
+  name        String
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+
+  system      RpgSystem @relation(fields: [systemId], references: [id])
+  attributeModifiers SystemRaceAttributeModifier[]
+  traits             SystemRaceTrait[]
+  templateRaces      TemplateRaceDefinition[]
+
+  @@map("system_race_definitions")
+}
+
+model SystemRaceAttributeModifier {
+  id               String               @id @default(uuid())
+  raceDefinitionId String               @map("race_definition_id")
+  attributeName    String               @map("attribute_name")
+  modifier         Int
+
+  raceDefinition   SystemRaceDefinition @relation(fields: [raceDefinitionId], references: [id])
+
+  @@map("system_race_attribute_modifiers")
+}
+
+model SystemRaceTrait {
+  id               String               @id @default(uuid())
+  raceDefinitionId String               @map("race_definition_id")
+  name             String
+  description      String?
+  type             TraitType
+
+  raceDefinition   SystemRaceDefinition @relation(fields: [raceDefinitionId], references: [id])
+
+  @@map("system_race_traits")
+}
+
+model SystemClassDefinition {
+  id          String   @id @default(uuid())
+  systemId    String   @map("system_id")
+  name        String
+  description String?
+  hitDie      Int?     @map("hit_die")
+  sortOrder   Int      @default(0) @map("sort_order")
+
+  system      RpgSystem @relation(fields: [systemId], references: [id])
+  attributeModifiers SystemClassAttributeModifier[]
+  features           SystemClassFeature[]
+  templateClasses    TemplateClassDefinition[]
+
+  @@map("system_class_definitions")
+}
+
+model SystemClassAttributeModifier {
+  id                String                @id @default(uuid())
+  classDefinitionId String                @map("class_definition_id")
+  attributeName     String                @map("attribute_name")
+  modifier          Int
+  perLevel          Boolean               @default(false) @map("per_level")
+
+  classDefinition   SystemClassDefinition @relation(fields: [classDefinitionId], references: [id])
+
+  @@map("system_class_attribute_modifiers")
+}
+
+model SystemClassFeature {
+  id                String                @id @default(uuid())
+  classDefinitionId String                @map("class_definition_id")
+  name              String
+  description       String?
+  type              TraitType
+  levelRequired     Int                   @default(1) @map("level_required")
+
+  classDefinition   SystemClassDefinition @relation(fields: [classDefinitionId], references: [id])
+
+  @@map("system_class_features")
+}
+
+enum TableVisibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+
+  @@map("table_visibility")
+}
+
+model Table {
+  id         String   @id @default(uuid())
+  name       String
+  description String?
+  ownerId    String   @map("owner_id")
+  systemId   String?  @map("system_id")
+  visibility TableVisibility @default(PUBLIC)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  owner      User     @relation(fields: [ownerId], references: [id])
+  system     RpgSystem? @relation(fields: [systemId], references: [id])
+  roles      TableRole[]
+  members    TableMember[]
+  template   SheetTemplate?
+  sessionStates SheetSessionState[]
+
+  @@map("tables")
+}
+
+model TableRole {
+  id         String  @id @default(uuid())
+  tableId    String  @map("table_id")
+  name       String
+  isDefault  Boolean @default(false) @map("is_default")
+
+  table       Table   @relation(fields: [tableId], references: [id])
+  permissions TableRolePermission[]
+  members     TableMember[]
+
+  @@map("table_roles")
+}
+
+model TableRolePermission {
+  id            String    @id @default(uuid())
+  tableRoleId   String    @map("table_role_id")
+  permission    String
+
+  tableRole     TableRole @relation(fields: [tableRoleId], references: [id])
+
+  @@map("table_role_permissions")
+}
+
+model TableMember {
+  id          String   @id @default(uuid())
+  tableId     String   @map("table_id")
+  userId      String   @map("user_id")
+  tableRoleId String   @map("table_role_id")
+  joinedAt    DateTime @default(now()) @map("joined_at")
+
+  table       Table     @relation(fields: [tableId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+  tableRole   TableRole @relation(fields: [tableRoleId], references: [id])
+
+  permissions TableMemberPermission[]
+  sheets      CharacterSheet[]
+
+  @@unique([tableId, userId])
+  @@map("table_members")
+}
+
+model TableMemberPermission {
+  id         String  @id @default(uuid())
+  memberId   String  @map("member_id")
+  permission String
+  granted    Boolean
+
+  member     TableMember @relation(fields: [memberId], references: [id])
+
+  @@map("table_member_permissions")
+}
+
+model SheetTemplate {
+  id         String   @id @default(uuid())
+  tableId    String   @unique @map("table_id")
+  systemId   String?  @map("system_id")
+  name       String
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  table      Table      @relation(fields: [tableId], references: [id])
+  system     RpgSystem? @relation(fields: [systemId], references: [id])
+  creator    User       @relation("CreatedBy", fields: [createdBy], references: [id])
+
+  sheets     CharacterSheet[]
+  attributeDefinitions TemplateAttributeDefinition[]
+  attributeFormulas    TemplateAttributeFormula[]
+  skillDefinitions     TemplateSkillDefinition[]
+  itemCategories       TemplateItemCategory[]
+  raceDefinitions      TemplateRaceDefinition[]
+  classDefinitions     TemplateClassDefinition[]
+
+  @@map("sheet_templates")
+}
+
+model TemplateAttributeDefinition {
+  id           String        @id @default(uuid())
+  templateId   String        @map("template_id")
+  name         String
+  label        String
+  type         AttributeType
+  defaultValue String?       @map("default_value")
+  sortOrder    Int           @default(0) @map("sort_order")
+
+  template     SheetTemplate @relation(fields: [templateId], references: [id])
+  sheetAttributes SheetAttribute[]
+
+  @@map("template_attribute_definitions")
+}
+
+model TemplateAttributeFormula {
+  id          String        @id @default(uuid())
+  templateId  String        @map("template_id")
+  targetAttr  String        @map("target_attr")
+  formula     String
+  dependsOn   Json          @map("depends_on")
+  priority    Int           @default(0)
+  isActive    Boolean       @default(true) @map("is_active")
+
+  template    SheetTemplate @relation(fields: [templateId], references: [id])
+
+  @@map("template_attribute_formulas")
+}
+
+model TemplateSkillDefinition {
+  id          String        @id @default(uuid())
+  templateId  String        @map("template_id")
+  name        String
+  label       String
+  sortOrder   Int           @default(0) @map("sort_order")
+
+  template    SheetTemplate @relation(fields: [templateId], references: [id])
+  sheetSkills SheetSkill[]
+
+  @@map("template_skill_definitions")
+}
+
+model TemplateItemCategory {
+  id          String        @id @default(uuid())
+  templateId  String        @map("template_id")
+  name        String
+
+  template    SheetTemplate @relation(fields: [templateId], references: [id])
+  sheetItems  SheetItem[]
+
+  @@map("template_item_categories")
+}
+
+model TemplateRaceDefinition {
+  id             String                @id @default(uuid())
+  templateId     String                @map("template_id")
+  systemRaceId   String?               @map("system_race_id")
+  name           String
+  description    String?
+  sortOrder      Int                   @default(0) @map("sort_order")
+
+  template       SheetTemplate         @relation(fields: [templateId], references: [id])
+  systemRace     SystemRaceDefinition? @relation(fields: [systemRaceId], references: [id])
+  attributeModifiers TemplateRaceAttributeModifier[]
+  traits             TemplateRaceTrait[]
+  characterSheets    CharacterSheet[]
+
+  @@map("template_race_definitions")
+}
+
+model TemplateRaceAttributeModifier {
+  id               String                 @id @default(uuid())
+  templateRaceId   String                 @map("template_race_id")
+  attributeName    String                 @map("attribute_name")
+  modifier         Int
+
+  templateRace     TemplateRaceDefinition @relation(fields: [templateRaceId], references: [id])
+
+  @@map("template_race_attribute_modifiers")
+}
+
+model TemplateRaceTrait {
+  id               String                 @id @default(uuid())
+  templateRaceId   String                 @map("template_race_id")
+  name             String
+  description      String?
+  type             TraitType
+
+  templateRace     TemplateRaceDefinition @relation(fields: [templateRaceId], references: [id])
+  sheetRaceTraits  SheetRaceTrait[]
+
+  @@map("template_race_traits")
+}
+
+model TemplateClassDefinition {
+  id              String                 @id @default(uuid())
+  templateId      String                 @map("template_id")
+  systemClassId   String?                @map("system_class_id")
+  name            String
+  description     String?
+  hitDie          Int?                   @map("hit_die")
+  sortOrder       Int                    @default(0) @map("sort_order")
+
+  template        SheetTemplate          @relation(fields: [templateId], references: [id])
+  systemClass     SystemClassDefinition? @relation(fields: [systemClassId], references: [id])
+  attributeModifiers TemplateClassAttributeModifier[]
+  features           TemplateClassFeature[]
+  sheetClasses       SheetClass[]
+
+  @@map("template_class_definitions")
+}
+
+model TemplateClassAttributeModifier {
+  id                String                  @id @default(uuid())
+  templateClassId   String                  @map("template_class_id")
+  attributeName     String                  @map("attribute_name")
+  modifier          Int
+  perLevel          Boolean                 @default(false) @map("per_level")
+
+  templateClass     TemplateClassDefinition @relation(fields: [templateClassId], references: [id])
+
+  @@map("template_class_attribute_modifiers")
+}
+
+model TemplateClassFeature {
+  id                String                  @id @default(uuid())
+  templateClassId   String                  @map("template_class_id")
+  name              String
+  description       String?
+  type              TraitType
+  levelRequired     Int                     @default(1) @map("level_required")
+
+  templateClass     TemplateClassDefinition @relation(fields: [templateClassId], references: [id])
+  sheetClassFeatures SheetClassFeature[]
+
+  @@map("template_class_features")
+}
+
+enum SheetStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  RETIRED
+  DECEASED
+
+  @@map("sheet_status")
+}
+
+enum EffectType {
+  CONDITION
+  BUFF
+  DEBUFF
+  INJURY
+  DEATH
+
+  @@map("effect_type")
+}
+
+model CharacterSheet {
+  id         String   @id @default(uuid())
+  memberId   String   @map("member_id")
+  templateId String   @map("template_id")
+  name       String   @default("")
+  raceId     String?  @map("race_id")
+  status     SheetStatus @default(DRAFT)
+  lastCalculatedAt DateTime? @map("last_calculated_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  member     TableMember @relation(fields: [memberId], references: [id])
+  template   SheetTemplate @relation(fields: [templateId], references: [id])
+  race       TemplateRaceDefinition? @relation(fields: [raceId], references: [id])
+
+  attributes SheetAttribute[]
+  skills     SheetSkill[]
+  items      SheetItem[]
+  classes    SheetClass[]
+  raceTraits SheetRaceTrait[]
+  effects    SheetEffect[]
+  sessionStates SheetSessionState[]
+  currencies SheetCurrency[]
+  attributeOverrides SheetAttributeOverride[]
+
+  @@map("character_sheets")
+}
+
+model SheetAttribute {
+  id            String                      @id @default(uuid())
+  sheetId       String                      @map("sheet_id")
+  definitionId  String                      @map("definition_id")
+  value         String
+
+  sheet         CharacterSheet              @relation(fields: [sheetId], references: [id])
+  definition    TemplateAttributeDefinition @relation(fields: [definitionId], references: [id])
+
+  @@map("sheet_attributes")
+}
+
+model SheetSkill {
+  id            String                  @id @default(uuid())
+  sheetId       String                  @map("sheet_id")
+  definitionId  String                  @map("definition_id")
+  value         Int                     @default(0)
+  isProficient  Boolean                 @default(false) @map("is_proficient")
+
+  sheet         CharacterSheet          @relation(fields: [sheetId], references: [id])
+  definition    TemplateSkillDefinition @relation(fields: [definitionId], references: [id])
+
+  @@map("sheet_skills")
+}
+
+model SheetItem {
+  id          String                @id @default(uuid())
+  sheetId     String                @map("sheet_id")
+  categoryId  String?               @map("category_id")
+  name        String
+  description String?
+  quantity    Int                   @default(1)
+  weight      Float?
+  properties  Json?                 @map("properties")
+
+  sheet       CharacterSheet        @relation(fields: [sheetId], references: [id])
+  category    TemplateItemCategory? @relation(fields: [categoryId], references: [id])
+  modifiers   SheetItemModifier[]
+
+  @@map("sheet_items")
+}
+
+model SheetItemModifier {
+  id             String      @id @default(uuid())
+  itemId         String      @map("item_id")
+  attributeName  String      @map("attribute_name")
+  modifier       Int
+  isEquipped     Boolean     @default(false) @map("is_equipped")
+
+  item           SheetItem   @relation(fields: [itemId], references: [id])
+
+  @@map("sheet_item_modifiers")
+}
+
+model SheetClass {
+  id          String                  @id @default(uuid())
+  sheetId     String                  @map("sheet_id")
+  classId     String                  @map("class_id")
+  level       Int                     @default(1)
+  isPrimary   Boolean                 @default(false) @map("is_primary")
+  createdAt   DateTime                @default(now()) @map("created_at")
+
+  sheet       CharacterSheet          @relation(fields: [sheetId], references: [id])
+  class       TemplateClassDefinition @relation(fields: [classId], references: [id])
+  features    SheetClassFeature[]
+
+  @@unique([sheetId, classId])
+  @@map("sheet_classes")
+}
+
+model SheetClassFeature {
+  id             String               @id @default(uuid())
+  sheetClassId   String               @map("sheet_class_id")
+  featureId      String               @map("feature_id")
+  isActive       Boolean              @default(true) @map("is_active")
+
+  sheetClass     SheetClass           @relation(fields: [sheetClassId], references: [id])
+  feature        TemplateClassFeature @relation(fields: [featureId], references: [id])
+
+  @@map("sheet_class_features")
+}
+
+model SheetRaceTrait {
+  id          String            @id @default(uuid())
+  sheetId     String            @map("sheet_id")
+  traitId     String            @map("trait_id")
+  isActive    Boolean           @default(true) @map("is_active")
+
+  sheet       CharacterSheet    @relation(fields: [sheetId], references: [id])
+  trait       TemplateRaceTrait @relation(fields: [traitId], references: [id])
+
+  @@map("sheet_race_traits")
+}
+
+model SheetEffect {
+  id          String         @id @default(uuid())
+  sheetId     String         @map("sheet_id")
+  name        String
+  type        EffectType
+  description String?
+  isActive    Boolean        @default(true) @map("is_active")
+  expiresAt   DateTime?      @map("expires_at")
+  appliedBy   String?        @map("applied_by")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  sheet       CharacterSheet @relation(fields: [sheetId], references: [id])
+  applier     User?          @relation("AppliedBy", fields: [appliedBy], references: [id])
+
+  @@map("sheet_effects")
+}
+
+model SheetSessionState {
+  id          String         @id @default(uuid())
+  sheetId     String         @map("sheet_id")
+  tableId     String         @map("table_id")
+  isVisible   Boolean        @default(true) @map("is_visible")
+  isInScene   Boolean        @default(false) @map("is_in_scene")
+  updatedAt   DateTime       @default(now()) @map("updated_at")
+  updatedBy   String         @map("updated_by")
+
+  sheet       CharacterSheet @relation(fields: [sheetId], references: [id])
+  table       Table          @relation(fields: [tableId], references: [id])
+  updater     User           @relation("UpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([sheetId, tableId])
+  @@map("sheet_session_states")
+}
+
+model SheetCurrency {
+  id           String                   @id @default(uuid())
+  sheetId      String                   @map("sheet_id")
+  definitionId String                   @map("definition_id")
+  amount       Int                      @default(0)
+
+  sheet        CharacterSheet           @relation(fields: [sheetId], references: [id])
+  definition   SystemCurrencyDefinition @relation(fields: [definitionId], references: [id])
+
+  @@unique([sheetId, definitionId])
+  @@map("sheet_currencies")
+}
+
+model SheetAttributeOverride {
+  id          String         @id @default(uuid())
+  sheetId     String         @map("sheet_id")
+  name        String
+  label       String
+  type        AttributeType
+  value       String
+  isVisible   Boolean        @default(true) @map("is_visible")
+  createdBy   String         @map("created_by")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  sheet       CharacterSheet @relation(fields: [sheetId], references: [id])
+  creator     User           @relation("CreatedBy", fields: [createdBy], references: [id])
+
+  @@map("sheet_attribute_overrides")
 }
