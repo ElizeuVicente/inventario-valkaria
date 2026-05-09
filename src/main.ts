@@ -11,8 +11,10 @@ async function bootstrap() {
     .setTitle('APIInventário')
     .setDescription('Documentação da API Inventário')
     .setVersion('1.0')
+    .addBearerAuth()
     .addTag('auth')
     .addTag('user')
+    .addTag('rpg-system')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);

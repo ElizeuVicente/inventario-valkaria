@@ -31,6 +31,8 @@ model User {
   updatedSessionStates SheetSessionState[] @relation("UpdatedBy")
   createdAttributeOverrides SheetAttributeOverride[] @relation("CreatedBy")
   createdTemplates SheetTemplate[] @relation("CreatedBy")
+  inviteTokensCreated InviteToken[]
+  joinRequests JoinRequest[]
 
   @@map("users")
 }
@@ -242,6 +244,8 @@ model Table {
   members    TableMember[]
   template   SheetTemplate?
   sessionStates SheetSessionState[]
+  inviteTokens InviteToken[]
+  joinRequests JoinRequest[]
 
   @@map("tables")
 }
@@ -664,4 +668,41 @@ model SheetAttributeOverride {
   creator     User           @relation("CreatedBy", fields: [createdBy], references: [id])
 
   @@map("sheet_attribute_overrides")
+}
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("join_request_status")
+}
+
+model InviteToken {
+  id        String    @id @default(uuid())
+  tableId   String    @map("table_id")
+  token     String    @unique
+  createdBy String    @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  expiresAt DateTime? @map("expires_at")
+
+  table     Table @relation(fields: [tableId], references: [id])
+  creator   User  @relation(fields: [createdBy], references: [id])
+
+  @@map("invite_tokens")
+}
+
+model JoinRequest {
+  id        String            @id @default(uuid())
+  tableId   String            @map("table_id")
+  userId    String            @map("user_id")
+  status    JoinRequestStatus @default(PENDING)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  table Table @relation(fields: [tableId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([tableId, userId])
+  @@map("join_requests")
 }
