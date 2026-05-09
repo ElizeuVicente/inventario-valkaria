@@ -213,9 +213,57 @@ export class SheetService {
       throw new NotFoundException(`Sheet ${sheetId} not found`);
     }
 
-    if (sheet.template.attributeFormulas?.length > 0) {
+    // Calculate item modifiers per attribute
+    const itemModifiersByAttr = new Map<string, number>();
+    if (sheet.items?.length > 0) {
+      for (const item of sheet.items) {
+        if (item.modifiers?.length > 0) {
+          for (const mod of item.modifiers) {
+            if (mod.isEquipped) {
+              const attrName = mod.attributeName;
+              const current = itemModifiersByAttr.get(attrName) || 0;
+              itemModifiersByAttr.set(attrName, current + (mod.modifier || 0));
+            }
+          }
+        }
+      }
+    }
+
+    // Calculate active effects bonus
+    const effectBonusByAttr = new Map<string, number>();
+    if (sheet.effects?.length > 0) {
+      for (const effect of sheet.effects) {
+        if (
+          effect.isActive &&
+          (!effect.expiresAt || effect.expiresAt > new Date())
+        ) {
+          const bonus = this.extractBonusFromEffect(effect);
+          for (const [attr, value] of bonus) {
+            const current = effectBonusByAttr.get(attr) || 0;
+            effectBonusByAttr.set(attr, current + value);
+          }
+        }
+      }
+    }
+
+    // Apply all modifiers to attributes
+    if (sheet.attributes?.length > 0) {
+      for (const attr of sheet.attributes) {
+        const baseValue = parseFloat(attr.value);
+        const itemBonus = itemModifiersByAttr.get(attr.definition.name) || 0;
+        const effectBonus = effectBonusByAttr.get(attr.definition.name) || 0;
+
+        attr['baseValue'] = attr.value;
+        attr['itemModifiers'] = itemBonus;
+        attr['effectModifiers'] = effectBonus;
+        attr['total'] = baseValue + itemBonus + effectBonus;
+      }
+    }
+
+    // Apply formulas to calculated values
+    if (sheet.template.attributeFormulas?.length > 0 && sheet.attributes?.length > 0) {
       const baseAttributes = new Map(
-        sheet.attributes.map((attr) => [attr.definition.name, attr.value]),
+        sheet.attributes.map((attr) => [attr.definition.name, attr['total'] || attr.value]),
       );
 
       const activeFormulas = sheet.template.attributeFormulas.filter(
@@ -233,7 +281,7 @@ export class SheetService {
             varMap.set(key.toUpperCase(), value);
           }
 
-          let calculated: string | number = attr.value;
+          let calculated: string | number = attr['total'] || attr.value;
           for (const formula of attrFormulas.sort((a, b) => b.priority - a.priority)) {
             try {
               const vars: Record<string, string | number> = {};
@@ -245,11 +293,11 @@ export class SheetService {
                 vars,
               );
             } catch {
-              calculated = attr.value;
+              calculated = attr['total'] || attr.value;
             }
           }
 
-          attr.value = String(calculated);
+          attr['formulaResult'] = calculated;
         }
       }
     }
@@ -885,6 +933,20 @@ export class SheetService {
         createdBy: userId,
       },
     });
+  }
+
+  private extractBonusFromEffect(effect: any): Map<string, number> {
+    const bonus = new Map<string, number>();
+    // Parse effect description for bonuses (e.g., "+2 STR", "-1 DEX")
+    if (effect.description) {
+      const matches = effect.description.matchAll(/([+-]\d+)\s+(\w+)/g);
+      for (const match of matches) {
+        const value = parseInt(match[1]);
+        const attr = match[2].toUpperCase();
+        bonus.set(attr, (bonus.get(attr) || 0) + value);
+      }
+    }
+    return bonus;
   }
 
   async removeAttributeOverride(

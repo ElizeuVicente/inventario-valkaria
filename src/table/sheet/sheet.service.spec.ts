@@ -270,7 +270,7 @@ describe('SheetService', () => {
       mockPrismaService.sheetTemplate.findUnique.mockResolvedValue({ tableId: 'table-1' });
       mockPrismaService.tableMember.findUnique.mockResolvedValue({ userId: 'user-1' });
 
-      const dto = { name: 'Haste', type: 'BUFF' };
+      const dto = { name: 'Haste', type: 'BUFF' } as any;
 
       await expect(service.createEffect('table-1', 'sheet-1', 'user-1', dto))
         .rejects.toThrow(ConflictException);
@@ -292,7 +292,7 @@ describe('SheetService', () => {
       const pastDate = new Date();
       pastDate.setHours(pastDate.getHours() - 1);
 
-      const dto = { name: 'Expired', type: 'BUFF', expiresAt: pastDate.toISOString() };
+      const dto = { name: 'Expired', type: 'BUFF', expiresAt: pastDate.toISOString() } as any;
 
       await expect(service.createEffect('table-1', 'sheet-1', 'user-1', dto))
         .rejects.toThrow(BadRequestException);

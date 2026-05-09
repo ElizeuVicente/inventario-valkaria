@@ -6,7 +6,10 @@
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
+  "extensionsToTreatAsEsm": [".ts"],
   "moduleNameMapper": {
-    "^src/(.*)$": "<rootDir>/../src/$1"
-  }
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^(\\.{1,2}/.*)\\.js$": "$1"
+  },
+  "transformIgnorePatterns": ["node_modules/(?!(@prisma)/)"]
 }

@@ -10,7 +10,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { AuthGuard } from '../../auth/auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { TableMasterGuard } from '../guards/table-master.guard';
@@ -33,8 +33,10 @@ import { CreateEffectDto } from './dto/create-effect.dto';
 import { UpdateSessionStateDto } from './dto/update-session-state.dto';
 import { CreateAttributeOverrideDto } from './dto/create-attribute-override.dto';
 
-@ApiBearerAuth()
-@ApiTags('sheets')
+@ApiBearerAuth('access_token')
+@ApiTags('Character Sheet')
+@ApiParam({ name: 'tableId', description: 'Table ID' })
+@ApiParam({ name: 'sheetId', description: 'Character sheet ID' })
 @Controller('tables/:tableId/sheets')
 export class SheetController {
   constructor(private readonly sheetService: SheetService) {}
@@ -42,6 +44,18 @@ export class SheetController {
   @Post()
   @UseGuards(AuthGuard, TableMemberGuard)
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create character sheet',
+    description: 'Create a new character sheet with auto-populated attributes, skills, and currencies',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Character sheet created with auto-populated attributes',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Not a table member',
+  })
   async create(
     @Param('tableId') tableId: string,
     @CurrentUser() userId: string,
